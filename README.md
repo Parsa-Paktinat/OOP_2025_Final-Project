@@ -5,7 +5,7 @@ Final project of the Object Oriented Programming course at Sharif University of 
 [![Qt vecsion](https://img.shields.io/badge/Qt-6.9-blue.svg)](https://www.qt.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This is the final project for the Object-Oriented Programming course at the Faculty of Electrical Engineering, Sharif University of Technology (Fall 2025).
+This is the final project for the Object-Oriented Programming course at the Faculty of Electrical Engineering, Sharif University of Technology (Spring and Summer 2025).
 
 **Creators:** Parsa Paktinat, Mohammad Parsa Dini
 
@@ -45,6 +45,6 @@ I would be happy to use your ideas to improve and develop this program.
 |  Student Name  |        School      | Student ID |
 | :------------- | :----------------- | :--------- |
 | Parsa Paktinat | EE Department, SUT | 403101518  |
-| Mohammad Parsa Dino | EE Department, SUT | --- |
+| Mohammad Parsa Dini | EE Department, SUT | --- |
 
 ---
