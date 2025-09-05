@@ -154,7 +154,7 @@ void SchematicWidget::startOpenConfigureAnalysis() {
                 acSweepStopFrequency = parseSpiceValue(dialog.getACOmegaStop().toStdString());
                 acSweepNPoints = parseSpiceValue(dialog.getACNPoints().toStdString());
 
-                QString params = dialog.getTransientParameter();
+                QString params = dialog.getACParameter();
                 std::string paramStr = params.toStdString();
                 std::stringstream ss(paramStr);
                 std::string word;

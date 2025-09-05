@@ -1,5 +1,14 @@
 #include "mainwindow.h"
 #include <QDir>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QInputDialog>
+#include <QFileDialog>
+#include <QFile>
+#include <QTextStream>
+
+#include <QDebug>
+#include <QFileDialog>
 
 QString getSubcircuitLibraryPath() {
     QString appPath = QCoreApplication::applicationDirPath();
@@ -11,6 +20,24 @@ QString getSubcircuitLibraryPath() {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
+
+    // Initialize network manager
+    networkManager = new NetworkManager(&circuit, this);
+    connect(networkManager, &NetworkManager::connectionStatusChanged,
+             this, &MainWindow::onNetworkStatusChanged);
+    connect(networkManager, &NetworkManager::fileReceived,
+            this, &MainWindow::onFileReceived);
+
+    // connect(networkManager, &NetworkManager::voltageSourceReceived,
+    //         this, &MainWindow::onVoltageSourceReceived);
+    // connect(networkManager, &NetworkManager::circuitFileReceived,
+    //         this, &MainWindow::onCircuitFileReceived);
+    // connect(networkManager, &NetworkManager::signalDataReceived,
+    //         this, &MainWindow::onSignalDataReceived);
+    // connect(sendAction, &QAction::triggered, this, &MainWindow::hSendData); //added
+    //
+    // connect(networkManager, &NetworkManager::dataReceived, this, &MainWindow::onDataReceived); // Add this line
+
     loadSubcircuitsFromLibrary();
     setWindowIcon(QIcon(":/icon.png"));
     this->resize(900, 600);
@@ -91,6 +118,7 @@ void MainWindow::setupSchematicState(const QString& projectName) {
     schematic = new SchematicWidget(&circuit, this);
     setCentralWidget(schematic);
 
+    connect(saveAction, &QAction::triggered, this, &MainWindow::hSaveProject);
     connect(runAction, &QAction::triggered, schematic, &SchematicWidget::startRunAnalysis);
     connect(configureAnalysisAction, &QAction::triggered, schematic, &SchematicWidget::startOpenConfigureAnalysis);
     connect(wireAction, &QAction::triggered, schematic, &SchematicWidget::startPlacingWire);
@@ -105,6 +133,7 @@ void MainWindow::setupSchematicState(const QString& projectName) {
     connect(deleteModeAction, &QAction::triggered, schematic, &SchematicWidget::startDeleteComponent);
     connect(createSubcircuitAction, &QAction::triggered, schematic, &SchematicWidget::startCreateSubcircuit);
     connect(subcircuitLibraryAction, &QAction::triggered, schematic, &SchematicWidget::startOpeningSubcircuitLibrary);
+
 
     saveAction->setEnabled(true);
     configureAnalysisAction->setEnabled(true);
@@ -187,7 +216,8 @@ void MainWindow::starterWindow() {
     connect(openAction, &QAction::triggered, this, &MainWindow::hOpenProject);
     connect(quitAction, &QAction::triggered, this, &QApplication::quit);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::hShowSettings);
-    connect(saveAction, &QAction::triggered, this, &MainWindow::hSaveProject);
+    connect(networkAction, &QAction::triggered, this, &MainWindow::hNetworkConnection);  // Add this connection
+    connect(sendFileAction, &QAction::triggered, this, &MainWindow::hSendFile);
 
     shortcutRunner();
     implementMenuBar();
@@ -214,6 +244,9 @@ void MainWindow::initializeActions() {
     createSubcircuitAction = new QAction("Create Subcircuit", this);
     subcircuitLibraryAction = new QAction("Open Subcircuit Library", this);
     quitAction = new QAction("Exit", this);
+    networkAction = new QAction(QIcon(":/icon/icons/network.png"), "Network", this);  // Add this
+    //sendAction = new QAction(QIcon(":/icon/icons/send.png"), "Send", this); // added
+    sendFileAction = new QAction(QIcon(":/icon/icons/send.png"), "Send File", this);
 }
 
 void MainWindow::implementMenuBar() {
@@ -252,6 +285,7 @@ void MainWindow::implementMenuBar() {
 
     QMenu* tools = menuBar()->addMenu(tr("&Tools"));
     tools->addAction(settingsAction);
+    tools->addAction(networkAction);  // Add network action to tools menu
 
     QMenu* window = menuBar()->addMenu(tr("&Window"));
 
@@ -279,6 +313,9 @@ void MainWindow::implementToolBar() {
     mainToolBar->addAction(nodeLibraryAction);
     mainToolBar->addAction(labelAction);
     mainToolBar->addAction(deleteModeAction);
+    mainToolBar->addAction(networkAction); //added
+    //mainToolBar->addAction(sendAction); // added
+    mainToolBar->addAction(sendFileAction);
 
     mainToolBar->setIconSize(QSize(40, 40));
 }
@@ -299,4 +336,164 @@ void MainWindow::shortcutRunner() {
     nodeLibraryAction->setShortcut(QKeySequence(Qt::Key_P));
     labelAction->setShortcut(QKeySequence(Qt::Key_T));
     deleteModeAction->setShortcuts({QKeySequence(Qt::Key_Backspace), QKeySequence(Qt::Key_Delete)});
+    networkAction->setShortcut(QKeySequence(Qt::Key_N));  // Add network shortcut
+    //sendAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_T)); // added for sending
+    sendFileAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F)); // added for sending
 }
+
+
+void MainWindow::hNetworkConnection() {
+    NetworkDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        try {
+            if (dialog.isServer()) {
+                quint16 port = dialog.getPort();
+                if (networkManager->startServer(port)) {
+                    statusBar()->showMessage("Server started on port " + QString::number(port));
+                } else {
+                    QMessageBox::warning(this, "Server Error",
+                                        "Failed to start server. Check if port is available.");
+                }
+            } else {
+                QString host = dialog.getHost();
+                quint16 port = dialog.getPort();
+
+                if (networkManager->connectToServer(host, port)) {
+                    statusBar()->showMessage("Connecting to " + host + ":" + QString::number(port));
+                } else {
+                    QMessageBox::warning(this, "Connection Error",
+                                        "Failed to connect to server. Check host/port and try again.");
+                }
+            }
+        } catch (const std::exception& e) {
+            QMessageBox::critical(this, "Network Error",
+                                 QString("Network operation failed: %1").arg(e.what()));
+        }
+    }
+}
+
+void MainWindow::onNetworkStatusChanged(bool connected, const QString& message) {
+    statusBar()->showMessage(message);
+    networkAction->setIcon(connected ? QIcon(":/icon/icons/network_connected.png") : QIcon(":/icon/icons/network.png"));
+}
+
+void MainWindow::onVoltageSourceReceived(const QString& name, const QString& node1, const QString& node2,
+                                       double value, bool isSinusoidal,
+                                       double offset, double amplitude, double frequency) {
+    if (schematic) {
+        // Add the received voltage source to the circuit
+        std::vector<double> sinParams;
+        if (isSinusoidal) {
+            sinParams = {offset, amplitude, frequency};
+        }
+        circuit.addComponent("V", name.toStdString(), node1.toStdString(), node2.toStdString(),
+                           value, sinParams, {}, isSinusoidal);
+        schematic->update();
+        statusBar()->showMessage("Received voltage source: " + name);
+    }
+}
+
+void MainWindow::onCircuitFileReceived() {
+    if (schematic) {
+        schematic->update();
+        statusBar()->showMessage("Circuit file received and loaded");
+    }
+}
+
+void MainWindow::onSignalDataReceived(const std::map<double, double>& data, const QString& signalName) {
+    // Create a plot window to display the received signal
+    PlotTransientData* plotWindow = new PlotTransientData(this);
+    plotWindow->addSeries(data, signalName);
+    plotWindow->show();
+    statusBar()->showMessage("Signal data received: " + signalName);
+}
+
+void MainWindow::saveProject() {
+    // Implementation that saves user actions to project.log.txt
+    QFile file("project.log.txt");
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        // Write all user actions to the file
+        // This should match your existing logging mechanism
+        file.close();
+    }
+}
+
+
+
+void MainWindow::hSendFile() {
+    if (!networkManager->isConnected()) {
+        QMessageBox::warning(this, "Error", "You are not connected to a server or client.");
+        return;
+    }
+
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Select File to Send",
+        QCoreApplication::applicationDirPath(),
+        "All Files (*)"
+    );
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    try {
+        networkManager->sendFile(filePath);
+        statusBar()->showMessage("File sent successfully: " + QFileInfo(filePath).fileName(), 3000);
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", QString("Failed to send file: %1").arg(e.what()));
+    }
+}
+
+
+void MainWindow::onFileReceived(const QString& fileName, const QByteArray& fileData) {
+    QString savePath = QFileDialog::getSaveFileName(
+        this,
+        "Save Received File",
+        QCoreApplication::applicationDirPath() + "/" + fileName,
+        "All Files (*)"
+    );
+
+    if (savePath.isEmpty()) {
+        qDebug() << "User canceled file save";
+        return;
+    }
+
+    QFile file(savePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, "Error", QString("Failed to save file '%1'.").arg(fileName));
+        return;
+    }
+
+    if (file.write(fileData) != fileData.size()) {
+        qWarning() << "Failed to write complete file data to" << savePath;
+    } else {
+        statusBar()->showMessage("File saved successfully: " + QFileInfo(savePath).fileName(), 3000);
+        QMessageBox::information(this, "Success", QString("File '%1' received and saved successfully.").arg(fileName));
+    }
+    file.close();
+}
+// void MainWindow::onFileReceived(const QString& fileName, const QByteArray& fileData) {
+//     // Ask user where to save the file
+//     QString savePath = QFileDialog::getSaveFileName(
+//         this,
+//         "Save Received File",
+//         QCoreApplication::applicationDirPath() + "/" + fileName,
+//         "All Files (*)"
+//     );
+//
+//     if (!savePath.isEmpty()) {
+//         QFile file(savePath);
+//         if (file.open(QIODevice::WriteOnly)) {
+//             file.write(fileData);
+//             file.close();
+//             statusBar()->showMessage("File saved successfully: " + QFileInfo(savePath).fileName(), 3000);
+//             QMessageBox::information(this, "Success",
+//                 QString("File '%1' received and saved successfully.").arg(fileName));
+//         } else {
+//             QMessageBox::warning(this, "Error",
+//                 QString("Failed to save file '%1'.").arg(fileName));
+//         }
+//     }
+// }

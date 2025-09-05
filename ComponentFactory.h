@@ -1,7 +1,3 @@
-//
-// Created by parsa on 8/5/2025.
-//
-
 #ifndef COMPONENTFACTORY_H
 #define COMPONENTFACTORY_H
 

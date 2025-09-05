@@ -1,3 +1,5 @@
+#include <QString>
+
 #include "component.h"
 
 // -------------------------------- Constructor impementation --------------------------------

@@ -2,6 +2,8 @@
 #include <utility>
 #include <cctype>
 #include <QFile>
+#include <QFileDialog>
+#include <fstream>
 #include "circuit.h"
 namespace fs = std::filesystem;
 
@@ -625,7 +627,7 @@ void Circuit::updateNonlinearComponentStates(const Eigen::VectorXd& solution,
 
 
 // -------------------------------- Analysis Methods --------------------------------
-    void Circuit::runTransientAnalysis(double stopTime, double startTime, double maxTimeStep) {
+void Circuit::runTransientAnalysis(double stopTime, double startTime, double maxTimeStep) {
     if (maxTimeStep == 0.0)
         maxTimeStep = (stopTime - startTime) / 100;
     std::cout << "\n---------- Performing Transient Analysis ----------" << std::endl;
@@ -650,62 +652,39 @@ void Circuit::updateNonlinearComponentStates(const Eigen::VectorXd& solution,
         }
     }
 
-    double t = startTime;
-    double h = maxTimeStep;
-    const double h_min = 1e-12;
-
-    while (t < stopTime) {
-        if (t + h > stopTime)
-            h = stopTime - t;
-
-        Eigen::VectorXd solution;
-        bool stepSucceeded = false;
-
-        while (!stepSucceeded) {
-            if (h < h_min) {
-                 std::cout << "ERROR at t = " << t << "s: Timestep fell below minimum. Simulation stopped." << std::endl;
-                 return;
-            }
-
-            bool nr_converged = false;
-            if (!hasNonlinearComponents) {
-                buildMNAMatrix(t + h, h);
-                solution = solveMNASystem();
-                if (solution.size() > 0)
-                    nr_converged = true;
-            }
-            else {
-                const int MAX_ITERATIONS = 100;
-                const double TOLERANCE = 1e-6;
-                Eigen::VectorXd lastSolution;
-                for (int i = 0; i < MAX_ITERATIONS; ++i) {
-                    buildMNAMatrix(t + h, h);
-                    solution = solveMNASystem();
-                    if (solution.size() == 0) {
-                        nr_converged = false;
-                        break;
-                    }
-                    if (i > 0 && (solution - lastSolution).norm() < TOLERANCE) {
-                        nr_converged = true;
-                        break;
-                    }
-                    lastSolution = solution;
-                    updateNonlinearComponentStates(solution, nodeIdToMnaIndex);
-                }
-            }
-
-            if (nr_converged)
-                stepSucceeded = true;
-            else
-                h = h / 2.0;
+    for (double t = startTime; t <= stopTime; t += maxTimeStep) {
+        if (!hasNonlinearComponents) {
+            buildMNAMatrix(t, maxTimeStep);
+            solution = solveMNASystem();
         }
-        t += h;
+        else {
+            const int MAX_ITERATIONS = 100;
+            const double TOLERANCE = 1e-6;
+            bool converged = false;
+            Eigen::VectorXd lastSolution;
+
+            for (int i = 0; i < MAX_ITERATIONS; ++i) {
+                buildMNAMatrix(t, maxTimeStep);
+                solution = solveMNASystem();
+                if (solution.size() == 0) break;
+
+                if (i > 0 && (solution - lastSolution).norm() < TOLERANCE) {
+                    converged = true;
+                    break;
+                }
+                lastSolution = solution;
+                updateNonlinearComponentStates(solution, nodeIdToMnaIndex);
+            }
+            if (!converged)
+                std::cout << "Warning: Transient analysis did not converge at t = " << t << "s" << std::endl;
+        }
+        if (solution.size() == 0) {
+            std::cout << "ERROR at t = " << t << "s: Simulation stopped." << std::endl;
+            return;
+        }
         updateComponentStates(solution, nodeIdToMnaIndex);
         transientSolutions[t] = solution;
-
-        h = maxTimeStep;
     }
-
     std::cout << "Transient analysis complete. " << transientSolutions.size() << " time points stored." << std::endl;
 }
 

@@ -116,7 +116,7 @@ private:
     double acSweepStartFrequency = 0.0;
     double acSweepStopFrequency = 0.0;
     double acSweepNPoints = 0.0;
-    
+
     QString currentSubcircuitName;
     std::vector<QString> subcircuitNodes;
 };

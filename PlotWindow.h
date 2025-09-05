@@ -18,6 +18,10 @@
 #include <QtCharts/QLegend>
 #include <QtCharts/QLegendMarker>
 #include <QStatusBar>
+#include <QToolBar>  // Add this include
+#include <QAction>   // Add this include
+#include <QFileDialog> // Add this include
+#include <fstream>    // Add this include
 
 #include <map>
 #include <limits>
@@ -39,8 +43,9 @@ protected:
     QScatterSeries *cursorSeries;
     QList<QLineSeries*> m_seriesList;
 
-private slots:
-    void verticalScaleChanged(int value);
+    private slots:
+        void verticalScaleChanged(int value);
+        void saveDataToFile();  // Add this slot
     void horizontalScaleChanged(int value);
     void showContextMenu(const QPoint &pos);
     void changeSeriesColor();
@@ -51,13 +56,16 @@ private slots:
 
 private:
     void updateFullRange();
+    void createToolBar();   // Add this function
 
     QSlider *verticalSlider;
     QSlider *horizontalSlider;
 
     QPair<double, double> fullXRange;
     QPair<double, double> fullYRange;
-    QLineSeries* m_activeSeries; 
+    QLineSeries* m_activeSeries;
+    QToolBar *toolBar;      // Add this member
+    QAction *saveAction;    // Add this member
 };
 
 class PlotTransientData : public PlotWindow {

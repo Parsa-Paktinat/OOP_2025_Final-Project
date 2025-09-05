@@ -1,7 +1,3 @@
-//
-// Created by parsa on 8/5/2025.
-//
-
 #include "ComponentFactory.h"
 
 Component* ComponentFactory::createComponent(
